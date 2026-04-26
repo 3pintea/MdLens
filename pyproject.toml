@@ -1,7 +1,7 @@
 [project]
 name = "mdlens"
-version = "0.1.0"
-description = "A lightweight read-only Markdown reader with a SQLite search index."
+version = "0.1.1"
+description = "A lightweight browser-based Markdown reader."
 readme = "README.md"
 requires-python = ">=3.12"
 keywords = ["fastapi", "markdown", "reader", "sqlite", "viewer"]

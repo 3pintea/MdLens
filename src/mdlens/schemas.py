@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -50,3 +52,12 @@ class IndexStats(BaseModel):
     unchanged: int = 0
     deleted: int = 0
     errors: list[str] = Field(default_factory=list)
+
+
+class JobStatusResponse(BaseModel):
+    id: str
+    kind: str
+    status: str
+    message: str = ""
+    result: dict[str, Any] | None = None
+    error: str = ""

@@ -1,16 +1,7 @@
 # MdLens
 
 軽量な読み取り専用 Markdown リーダーです。
-
-- `uv` と Python 3.12 で実行します。
-- `.md` ファイルを SQLite index に登録します。
-- SQL 操作は SQLAlchemy、API は FastAPI、入出力データは Pydantic で扱います。
-- index がない状態でアプリを起動すると、自動で index を作成します。
-- ブラウザ上で左に階層ファイル一覧、右にレンダリング済み Markdown を表示します。
-- SQLite FTS を使って文字列検索できます。
-- 画面上で対象フォルダを切り替えられます。
-- 画面上の `Sync` から index を再作成できます。
-- ファイルツリーは `Expand` / `Collapse` でまとめて開閉できます。
+ブラウザ上で左に階層ファイル一覧、右にレンダリング済み Markdown を表示します。
 
 ## 使い方
 
@@ -26,7 +17,6 @@ uv run mdlens index
 uv run mdlens app
 ```
 
-index ファイルは既定で対象フォルダ直下の `.mdlens_index.sqlite3` に作られます。
 
 ## GitHub/GitLab リポジトリ
 
@@ -82,11 +72,10 @@ uv run mdlens app [folder]
 uv run --python 3.12 --group dev pytest
 ```
 
-coverage は `pyproject.toml` で `90%` 以上を要求しています。テスト方針は [docs/testing.md](docs/testing.md) にまとめています。
+詳しくは [docs/testing.md](docs/testing.md) を参照してください。
 
 ## ドキュメント
 
-- [docs/architecture.md](docs/architecture.md): アプリ構成、index 更新、API、UI の責務
-- [docs/testing.md](docs/testing.md): pytest 実行方法、Given/When/Then 方針、coverage 対象
-
+- [docs/architecture.md](docs/architecture.md): アプリ構成
+- [docs/testing.md](docs/testing.md): pytest 実行方法
 - [docs/publishing.md](docs/publishing.md): PyPI / TestPyPI publishing guide

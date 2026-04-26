@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 from mdlens.db import create_engine_for_index, ensure_schema, get_meta_value
 from mdlens.indexer import iter_markdown_files, parent_path, refresh_index
-from mdlens.repository import count_files, list_files, search_files
+from mdlens.repository import build_link_index, count_files, list_files, search_files
 from sqlalchemy.orm import Session
 
 
@@ -80,3 +81,52 @@ def test_refresh_index_marks_unchanged_files(workspace_tmp: Path) -> None:
     # Then: 本文の読み直しは不要として unchanged 扱いになる。
     assert stats.updated == 0
     assert stats.unchanged == 1
+
+
+def test_refresh_index_keeps_existing_record_when_read_fails(
+    workspace_tmp: Path,
+) -> None:
+    # Given: 既に index 済みの Markdown ファイル。
+    root = workspace_tmp / "library"
+    root.mkdir()
+    note = root / "note.md"
+    note.write_text("# Stable\n\nsame", encoding="utf-8")
+    index_path = root / ".mdlens_index.sqlite3"
+    refresh_index(root, index_path)
+    note.write_text("# Changed\n\nsame", encoding="utf-8")
+
+    # When: 更新走査中に読み込みだけ失敗する。
+    with patch("mdlens.indexer.read_markdown", side_effect=OSError("locked")):
+        stats = refresh_index(root, index_path)
+
+    # Then: 既存レコードは stale 扱いで削除されない。
+    engine = create_engine_for_index(index_path)
+    ensure_schema(engine)
+    with Session(engine) as session:
+        assert stats.deleted == 0
+        assert stats.unchanged == 1
+        assert stats.errors
+        assert count_files(session) == 1
+    engine.dispose()
+
+
+def test_build_link_index_omits_ambiguous_titles(workspace_tmp: Path) -> None:
+    # Given: 同じタイトルを持つ複数の Markdown ファイル。
+    root = workspace_tmp / "library"
+    root.mkdir()
+    (root / "a.md").write_text("# Same\n\nA", encoding="utf-8")
+    (root / "b.md").write_text("# Same\n\nB", encoding="utf-8")
+    index_path = root / ".mdlens_index.sqlite3"
+    refresh_index(root, index_path)
+
+    # When: WikiLink 解決用の索引を作る。
+    engine = create_engine_for_index(index_path)
+    ensure_schema(engine)
+    with Session(engine) as session:
+        link_index = build_link_index(session)
+
+    # Then: 一意なパスは解決でき、曖昧なタイトルは誤解決しない。
+    assert "a.md" in link_index
+    assert "b.md" in link_index
+    assert "same" not in link_index
+    engine.dispose()

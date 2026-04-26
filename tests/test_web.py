@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from mdlens.config import AppConfig
 from mdlens.indexer import refresh_index
-from mdlens.repo_clone import RepositoryWorkspace
+from mdlens.repo_clone import RepositoryCloneError, RepositoryWorkspace
 from mdlens.web import create_app
 
 
@@ -51,6 +52,71 @@ def test_fastapi_routes_return_tree_file_search_asset_and_refresh(
         assert asset_response.status_code == 200
         assert asset_response.content == b"png"
         assert refresh_response.json()["seen"] == 1
+
+
+def test_fastapi_file_renders_internal_links_and_job_refresh(
+    workspace_tmp: Path,
+) -> None:
+    # Given: 相対 Markdown リンクと WikiLink を含むライブラリ。
+    root = workspace_tmp / "library"
+    docs = root / "docs"
+    docs.mkdir(parents=True)
+    (docs / "home.md").write_text(
+        "# Home\n\n[Next](next.md)\n\n[[Next Note]]",
+        encoding="utf-8",
+    )
+    (docs / "next.md").write_text("# Next Note\n\nBody", encoding="utf-8")
+    index_path = root / ".mdlens_index.sqlite3"
+    refresh_index(root, index_path)
+    app = create_app(AppConfig(root=root, index_path=index_path))
+
+    with TestClient(app) as client:
+        # When: ファイル表示とバックグラウンド refresh job を呼び出す。
+        tree = client.get("/api/tree").json()
+        home_id = next(
+            file["id"] for file in tree["files"] if file["name"] == "home.md"
+        )
+        next_id = next(
+            file["id"] for file in tree["files"] if file["name"] == "next.md"
+        )
+        file_response = client.get(f"/api/file?id={home_id}")
+        started = client.post("/api/jobs/refresh").json()
+        job = client.get(f"/api/jobs/{started['id']}").json()
+
+        # Then: 内部リンクはアプリ内遷移になり、job endpoint も結果を返す。
+        html = file_response.json()["html"]
+        assert f'href="/?id={next_id}"' in html
+        assert f'data-mdlens-file-id="{next_id}"' in html
+        assert started["status"] in {"pending", "running", "succeeded"}
+        assert job["status"] in {"pending", "running", "succeeded"}
+
+
+def test_fastapi_job_reports_failure_and_unknown_job(workspace_tmp: Path) -> None:
+    # Given: 起動済みアプリ。
+    root = workspace_tmp / "library"
+    root.mkdir()
+    make_library(root)
+    index_path = root / ".mdlens_index.sqlite3"
+    refresh_index(root, index_path)
+    app = create_app(AppConfig(root=root, index_path=index_path))
+
+    with TestClient(app) as client:
+        # When: 存在しないフォルダへの切り替え job と未知 job を呼び出す。
+        started = client.post(
+            "/api/jobs/folder", json={"folder": str(workspace_tmp / "missing")}
+        ).json()
+        job = started
+        for _ in range(20):
+            job = client.get(f"/api/jobs/{started['id']}").json()
+            if job["status"] == "failed":
+                break
+            time.sleep(0.05)
+        unknown = client.get("/api/jobs/missing")
+
+        # Then: job は失敗状態を返し、未知 job は 404 になる。
+        assert job["status"] == "failed"
+        assert "Folder not found" in job["error"]
+        assert unknown.status_code == 404
 
 
 def test_fastapi_folder_switches_library_and_rejects_invalid_path(
@@ -147,10 +213,19 @@ def test_fastapi_folder_rejects_unsupported_repository_url(workspace_tmp: Path) 
         response = client.post(
             "/api/folder", json={"folder": "https://example.com/acme/docs"}
         )
+        with patch(
+            "mdlens.web.clone_repository",
+            side_effect=RepositoryCloneError("network unavailable"),
+        ):
+            clone_error = client.post(
+                "/api/folder", json={"folder": "https://github.com/acme/docs"}
+            )
 
         # Then: 未対応URLとして拒否される。
         assert response.status_code == 400
         assert "GitHub and GitLab" in response.json()["detail"]
+        assert clone_error.status_code == 502
+        assert "Repository clone failed" in clone_error.json()["detail"]
 
 
 def test_fastapi_returns_404_for_missing_file_and_asset(workspace_tmp: Path) -> None:
@@ -167,7 +242,9 @@ def test_fastapi_returns_404_for_missing_file_and_asset(workspace_tmp: Path) -> 
         file_response = client.get("/api/file?id=999")
         file_id = client.get("/api/tree").json()["files"][0]["id"]
         asset_response = client.get(f"/asset?file={file_id}&path=missing.png")
+        root_asset_response = client.get(f"/asset?file={file_id}&path=/note.md")
 
         # Then: 読み取り不能な対象は 404 になる。
         assert file_response.status_code == 404
         assert asset_response.status_code == 404
+        assert root_asset_response.status_code == 200

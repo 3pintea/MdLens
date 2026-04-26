@@ -11,9 +11,9 @@ mdlens --help
 
 ## Package Name
 
-The PyPI name `mdlens` is already used by another project, so this project uses `mdlens` as its distribution name.
+The intended PyPI distribution name is `mdlens`.
 
-If you want a different PyPI name, change only this field before the first release:
+Before the first release, verify that the name can be created or that the project already belongs to the publisher. If you need a different distribution name, change only this field before publishing:
 
 ```toml
 [project]
@@ -68,5 +68,5 @@ The repository also includes `.github/workflows/publish.yml` for Trusted Publish
 
 ```powershell
 pipx install mdlens
-mdlens C:\path\to\markdown-folder
+mdlens app C:\path\to\markdown-folder
 ```

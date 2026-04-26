@@ -294,6 +294,17 @@ INDEX_HTML = r"""<!doctype html>
 
     .markdown-body a { color: #075985; }
 
+    .markdown-body a[data-mdlens-file-id] {
+      color: var(--accent-dark);
+      font-weight: 600;
+    }
+
+    .missing-link {
+      color: var(--danger);
+      text-decoration: underline dotted;
+      text-underline-offset: 3px;
+    }
+
     .markdown-body code {
       border-radius: 4px;
       padding: 0.12em 0.32em;
@@ -418,6 +429,7 @@ INDEX_HTML = r"""<!doctype html>
       switching: "Switching",
       switchFailed: "\u30d5\u30a9\u30eb\u30c0\u306e\u5207\u308a\u66ff\u3048\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002",
       enterFolder: "\u30d5\u30a9\u30eb\u30c0\u30d1\u30b9\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002",
+      jobFailed: "Operation failed.",
       apiUnavailable: "Cannot reach the MdLens API. Open the page from the running server URL and reload.",
     };
 
@@ -553,6 +565,22 @@ INDEX_HTML = r"""<!doctype html>
       return data;
     }
 
+    function wait(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function runJob(url, options = {}, fallbackMessage = messages.jobFailed) {
+      const started = await fetchJson(url, options, fallbackMessage);
+      let delay = 180;
+      while (true) {
+        const job = await fetchJson(`/api/jobs/${encodeURIComponent(started.id)}`, {}, fallbackMessage);
+        if (job.status === "succeeded") return job.result || {};
+        if (job.status === "failed") throw new Error(job.error || fallbackMessage);
+        await wait(delay);
+        delay = Math.min(delay + 120, 900);
+      }
+    }
+
     async function loadTree(selectInitial = true) {
       const data = await fetchJson("/api/tree", {}, messages.loadFailed);
       applyTreeData(data);
@@ -566,11 +594,20 @@ INDEX_HTML = r"""<!doctype html>
       if (!selectInitial) return;
       const params = new URLSearchParams(location.search);
       const initialId = Number(params.get("id")) || state.activeId || (state.files[0] && state.files[0].id);
-      if (initialId) await loadFile(initialId, true);
+      const initialFragment = location.hash ? decodeURIComponent(location.hash.slice(1)) : "";
+      if (initialId) await loadFile(initialId, true, initialFragment);
       else setPlaceholder();
     }
 
-    async function loadFile(id, replaceOnly = false) {
+    function scrollToFragment(fragment) {
+      if (!fragment) return;
+      requestAnimationFrame(() => {
+        const target = document.getElementById(fragment);
+        if (target) target.scrollIntoView({ block: "start" });
+      });
+    }
+
+    async function loadFile(id, replaceOnly = false, fragment = "") {
       let data;
       try {
         data = await fetchJson(`/api/file?id=${encodeURIComponent(id)}`, {}, messages.loadFailed);
@@ -585,8 +622,10 @@ INDEX_HTML = r"""<!doctype html>
       contentEl.innerHTML = data.html;
       updateActiveButton();
       if (!replaceOnly) {
-        history.replaceState(null, "", `?id=${encodeURIComponent(data.id)}`);
+        const hash = fragment ? `#${encodeURIComponent(fragment)}` : "";
+        history.replaceState(null, "", `?id=${encodeURIComponent(data.id)}${hash}`);
       }
+      scrollToFragment(fragment);
     }
 
     function renderResults(results) {
@@ -631,7 +670,7 @@ INDEX_HTML = r"""<!doctype html>
     async function refreshIndex() {
       const restoreButton = setButtonBusy(refreshButton, messages.syncing);
       try {
-        await fetchJson("/api/refresh", { method: "POST" }, messages.syncFailed);
+        await runJob("/api/jobs/refresh", { method: "POST" }, messages.syncFailed);
         await loadTree(false);
         if (state.activeId && state.files.some((file) => file.id === state.activeId)) {
           await loadFile(state.activeId, true);
@@ -655,7 +694,7 @@ INDEX_HTML = r"""<!doctype html>
 
       const restoreButton = setButtonBusy(switchFolderButton, messages.switching);
       try {
-        const data = await fetchJson("/api/folder", {
+        const data = await runJob("/api/jobs/folder", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ folder }),
@@ -684,6 +723,16 @@ INDEX_HTML = r"""<!doctype html>
     rootForm.addEventListener("submit", (event) => {
       event.preventDefault();
       switchFolder();
+    });
+    contentEl.addEventListener("click", (event) => {
+      const link = event.target.closest("a[data-mdlens-file-id]");
+      if (!link) return;
+      event.preventDefault();
+      const fileId = Number(link.dataset.mdlensFileId);
+      const fragment = link.dataset.mdlensFragment || "";
+      if (fileId) {
+        loadFile(fileId, false, fragment);
+      }
     });
     refreshButton.addEventListener("click", refreshIndex);
     expandAllButton.addEventListener("click", () => setAllDetails(true));

@@ -107,6 +107,9 @@ def refresh_index(root: Path, index_path: Path, engine: Engine | None = None) ->
                         text_content = read_markdown(path)
                     except OSError as exc:
                         stats["errors"].append(f"{rel_path}: {exc}")
+                        if record is not None:
+                            record.seen_scan = scan_id
+                            stats["unchanged"] += 1
                         continue
 
                     title = title_from_markdown(text_content, path.stem)
