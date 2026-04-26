@@ -1,0 +1,13 @@
+.venv/
+.uv-cache/
+.uv-python/
+.pytest-tmp/
+pytest_tmp_workspace/
+test_tmp_workspace/
+pytest-cache-files-*/
+.coverage
+htmlcov/
+__pycache__/
+*.py[cod]
+.mdreader_index.sqlite3
+.mdreader_index.sqlite3-*
