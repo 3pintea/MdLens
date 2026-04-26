@@ -17,6 +17,7 @@ uv run mdlens index
 uv run mdlens app
 ```
 
+index ファイルは既定では対象フォルダ内に作成せず、ユーザーデータ領域に保存します。Windows では通常 `%LOCALAPPDATA%\MdLens\indexes\...` です。保存先を明示したい場合は `--index PATH`、既定の親ディレクトリを変えたい場合は環境変数 `MDLENS_DATA_DIR` を使えます。
 
 ## GitHub/GitLab リポジトリ
 

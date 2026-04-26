@@ -9,6 +9,7 @@ import uvicorn
 
 from .config import (
     APP_NAME,
+    DATA_DIR_ENV,
     DEFAULT_INDEX_NAME,
     AppConfig,
     default_index_path,
@@ -52,7 +53,10 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
         "--index",
         dest="index_path",
         default=None,
-        help=f"Index path. Defaults to {DEFAULT_INDEX_NAME} under the folder.",
+        help=(
+            f"Index path. Defaults to MdLens user data under {DATA_DIR_ENV}, "
+            f"or the platform user data directory, using {DEFAULT_INDEX_NAME}."
+        ),
     )
 
 

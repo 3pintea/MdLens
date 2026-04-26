@@ -4,8 +4,9 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
-from mdlens.config import AppConfig
+from mdlens.config import AppConfig, default_index_path
 from mdlens.indexer import refresh_index
 from mdlens.repo_clone import RepositoryCloneError, RepositoryWorkspace
 from mdlens.web import create_app
@@ -121,8 +122,10 @@ def test_fastapi_job_reports_failure_and_unknown_job(workspace_tmp: Path) -> Non
 
 def test_fastapi_folder_switches_library_and_rejects_invalid_path(
     workspace_tmp: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Given: 起動時ライブラリと、画面から切り替える別ライブラリ。
+    monkeypatch.setenv("MDLENS_DATA_DIR", str(workspace_tmp / "data"))
     root = workspace_tmp / "library"
     other = workspace_tmp / "other"
     root.mkdir()
@@ -145,15 +148,18 @@ def test_fastapi_folder_switches_library_and_rejects_invalid_path(
         # Then: 新しい index が自動作成され、以後の API は切替先を参照する。
         assert switched.status_code == 200
         assert switched.json()["root"] == str(other.resolve())
-        assert (other / ".mdlens_index.sqlite3").exists()
+        assert default_index_path(other).exists()
+        assert not (other / ".mdlens_index.sqlite3").exists()
         assert "Second" in switched_file.json()["html"]
         assert invalid.status_code == 400
 
 
 def test_fastapi_folder_switch_clones_repository_url_and_cleans_previous_clone(
     workspace_tmp: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Given: 起動時ライブラリ、clone 済みとして扱うリポジトリ、一時 clone 後に戻るローカルフォルダ。
+    monkeypatch.setenv("MDLENS_DATA_DIR", str(workspace_tmp / "data"))
     root = workspace_tmp / "library"
     repo_temp = workspace_tmp / "repo-temp"
     repo_root = repo_temp / "acme_docs"

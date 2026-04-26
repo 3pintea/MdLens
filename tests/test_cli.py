@@ -6,20 +6,28 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from mdlens import cli
-from mdlens.config import AppConfig
+from mdlens.config import AppConfig, default_index_path
 from mdlens.schemas import IndexStats
 
 
-def test_paths_from_args_resolves_folder_and_default_index(workspace_tmp: Path) -> None:
+def test_paths_from_args_resolves_folder_and_default_index(
+    workspace_tmp: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Given: 存在する対象フォルダを指す CLI 引数。
+    data_dir = workspace_tmp.parent / f"{workspace_tmp.name}-data"
+    monkeypatch.setenv("MDLENS_DATA_DIR", str(data_dir))
     args = argparse.Namespace(folder=str(workspace_tmp), index_path=None)
 
     # When: CLI 用パス解決を行う。
     root, index_path = cli.paths_from_args(args)
 
-    # Then: root と既定 index パスが絶対パスになる。
+    # Then: root と既定 index パスが絶対パスになり、対象フォルダ外に置かれる。
     assert root == workspace_tmp.resolve()
-    assert index_path == workspace_tmp.resolve() / ".mdlens_index.sqlite3"
+    assert index_path == default_index_path(root)
+    assert index_path.name == ".mdlens_index.sqlite3"
+    assert index_path.is_relative_to(data_dir.resolve())
+    assert not index_path.is_relative_to(root)
 
 
 def test_paths_from_args_rejects_missing_folder(workspace_tmp: Path) -> None:

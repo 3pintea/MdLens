@@ -27,6 +27,8 @@ Windows 環境で一時ディレクトリの権限差に当たりにくくする
 
 生成される一時フォルダは `.gitignore` で除外しています。
 
+既定 index 保存先を検証するテストでは、実ユーザーデータ領域に書き込まないよう `MDLENS_DATA_DIR` を `workspace_tmp` 配下へ向けます。
+
 ## Coverage Scope
 
 coverage は `mdlens` パッケージを対象にしています。ただし、以下は除外しています。

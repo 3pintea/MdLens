@@ -24,7 +24,7 @@ src/mdlens/
 
 1. `mdlens index [folder]`、同期 API、または画面上の `Sync` で `indexer.refresh_index()` を実行します。
 2. `indexer` は対象フォルダ配下の `.md` を走査し、変更があるファイルだけ読み込みます。
-3. ファイル情報は `files` テーブルに保存し、検索対象テキストは `file_search` に保存します。
+3. ファイル情報はユーザーデータ領域の SQLite index に保存し、検索対象テキストは `file_search` に保存します。
 4. UI は `/api/tree` で一覧を取得し、左ペインへ階層表示します。
 5. ファイル選択時は `/api/file?id=...` で Markdown を HTML にレンダリングして表示します。このとき `.md` の相対リンクと `[[WikiLink]]` は index のファイルIDへ解決します。
 6. 検索時は `/api/search?q=...` で SQLite FTS または plain LIKE 検索を行います。
@@ -39,6 +39,10 @@ src/mdlens/
 6. 別のフォルダやリポジトリへ切り替えた時、またはアプリ終了時に、直前の一時 clone フォルダを削除します。
 
 ## SQLite Index
+
+既定の index は対象フォルダ直下には作成せず、ユーザーデータ領域に保存します。Windows では通常 `%LOCALAPPDATA%\MdLens\indexes\...`、それ以外では `XDG_DATA_HOME` または `~/.local/share/MdLens/indexes/...` を使います。環境変数 `MDLENS_DATA_DIR` がある場合は、その配下を使います。
+
+CLI の `--index PATH` を指定した場合だけ、指定された場所に index を作成します。
 
 `files` テーブルには、表示や差分更新に必要なメタデータを保存します。
 
