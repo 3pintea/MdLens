@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import mimetypes
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from threading import RLock
 from typing import Iterator
@@ -14,6 +16,15 @@ from .config import APP_NAME, AppConfig, default_index_path, resolve_root
 from .db import create_engine_for_index, ensure_schema, get_meta_value
 from .indexer import refresh_index
 from .markdown import is_within_root, read_markdown, render_markdown
+from .repo_clone import (
+    RepositoryCloneError,
+    RepositoryWorkspace,
+    UnsupportedRepositoryError,
+    cleanup_repository_workspace,
+    clone_repository,
+    looks_like_repository_url,
+    parse_repository_source,
+)
 from .repository import count_files, get_file_record, list_files, search_files
 from .schemas import (
     FolderSwitchRequest,
@@ -33,6 +44,52 @@ def get_session(request: Request) -> Iterator[Session]:
 
 def current_config(request: Request) -> AppConfig:
     return request.app.state.config
+
+
+def prepare_source_config(
+    source_text: str,
+) -> tuple[AppConfig, Engine, RepositoryWorkspace | None]:
+    """入力値から表示対象の root、index engine、一時 clone 情報を準備する。
+
+    Args:
+        source_text: 画面の入力欄から送られたフォルダパス、またはGitHub/GitLab URL。
+
+    Returns:
+        切り替え先の設定、SQLAlchemy engine、一時 clone 情報。
+
+    Raises:
+        HTTPException: フォルダが存在しない、またはcloneに失敗した場合。
+    """
+
+    workspace: RepositoryWorkspace | None = None
+    if looks_like_repository_url(source_text):
+        try:
+            workspace = clone_repository(parse_repository_source(source_text))
+        except UnsupportedRepositoryError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except RepositoryCloneError as exc:
+            raise HTTPException(
+                status_code=502, detail=f"Repository clone failed: {exc}"
+            ) from exc
+        root = workspace.root
+    else:
+        root = resolve_root(source_text)
+        if not root.exists() or not root.is_dir():
+            raise HTTPException(status_code=400, detail=f"Folder not found: {root}")
+
+    index_path = default_index_path(root)
+    should_refresh = not index_path.exists()
+    new_engine = create_engine_for_index(index_path)
+    try:
+        ensure_schema(new_engine)
+        if should_refresh:
+            refresh_index(root, index_path, new_engine)
+    except Exception:
+        new_engine.dispose()
+        cleanup_repository_workspace(workspace)
+        raise
+
+    return AppConfig(root=root, index_path=index_path), new_engine, workspace
 
 
 def tree_response(request: Request, session: Session) -> TreeResponse:
@@ -57,7 +114,7 @@ def tree_response(request: Request, session: Session) -> TreeResponse:
 
 
 def create_app(config: AppConfig, engine: Engine | None = None) -> FastAPI:
-    """MdReader の FastAPI アプリを作成する。
+    """MdLens の FastAPI アプリを作成する。
 
     Args:
         config: 起動時の対象フォルダと index パス。
@@ -70,10 +127,18 @@ def create_app(config: AppConfig, engine: Engine | None = None) -> FastAPI:
     engine = engine or create_engine_for_index(config.index_path)
     ensure_schema(engine)
 
-    app = FastAPI(title=APP_NAME, docs_url=None, redoc_url=None)
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            cleanup_repository_workspace(app.state.repo_workspace)
+
+    app = FastAPI(title=APP_NAME, docs_url=None, redoc_url=None, lifespan=lifespan)
     app.state.config = config
     app.state.engine = engine
     app.state.lock = RLock()
+    app.state.repo_workspace = None
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
@@ -120,26 +185,24 @@ def create_app(config: AppConfig, engine: Engine | None = None) -> FastAPI:
     def refresh(request: Request) -> IndexStats:
         with request.app.state.lock:
             config = current_config(request)
-            return refresh_index(config.root, config.index_path, request.app.state.engine)
+            return refresh_index(
+                config.root, config.index_path, request.app.state.engine
+            )
 
     @app.post("/api/folder", response_model=TreeResponse)
     def switch_folder(payload: FolderSwitchRequest, request: Request) -> TreeResponse:
-        root = resolve_root(payload.folder.strip())
-        if not root.exists() or not root.is_dir():
-            raise HTTPException(status_code=400, detail=f"Folder not found: {root}")
-
-        index_path = default_index_path(root)
-        should_refresh = not index_path.exists()
-        new_engine = create_engine_for_index(index_path)
-        ensure_schema(new_engine)
-        if should_refresh:
-            refresh_index(root, index_path, new_engine)
+        new_config, new_engine, new_workspace = prepare_source_config(
+            payload.folder.strip()
+        )
 
         with request.app.state.lock:
             old_engine = request.app.state.engine
-            request.app.state.config = AppConfig(root=root, index_path=index_path)
+            old_workspace = request.app.state.repo_workspace
+            request.app.state.config = new_config
             request.app.state.engine = new_engine
+            request.app.state.repo_workspace = new_workspace
             old_engine.dispose()
+            cleanup_repository_workspace(old_workspace)
             with Session(new_engine) as session:
                 return tree_response(request, session)
 

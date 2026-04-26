@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import text
-from sqlalchemy.orm import Session
-
-from mdreader.db import (
+from mdlens.db import (
     create_engine_for_index,
     delete_search_content,
     ensure_schema,
@@ -12,8 +9,10 @@ from mdreader.db import (
     set_meta_value,
     sqlite_url,
 )
-from mdreader.models import FileRecord
-from mdreader.repository import search_files
+from mdlens.models import FileRecord
+from mdlens.repository import search_files
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 
 def test_plain_search_backend_replaces_search_content(workspace_tmp) -> None:

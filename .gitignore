@@ -6,8 +6,9 @@ pytest_tmp_workspace/
 test_tmp_workspace/
 pytest-cache-files-*/
 .coverage
+dist/
 htmlcov/
 __pycache__/
 *.py[cod]
-.mdreader_index.sqlite3
-.mdreader_index.sqlite3-*
+.mdlens_index.sqlite3
+.mdlens_index.sqlite3-*

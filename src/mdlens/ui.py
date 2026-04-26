@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-
 INDEX_HTML = r"""<!doctype html>
 <html lang="ja">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MdReader</title>
+  <title>MdLens</title>
   <style>
     :root {
       color-scheme: light;
@@ -379,10 +378,10 @@ INDEX_HTML = r"""<!doctype html>
 <body>
   <div class="shell">
     <header class="topbar">
-      <div class="brand">MdReader</div>
+      <div class="brand">MdLens</div>
       <form class="root-control" id="root-form">
-        <input class="root-input" id="root-input" type="text" placeholder="Folder path" autocomplete="off">
-        <button class="tool-button primary top-action" id="switch-folder" type="submit" title="Switch folder">Go</button>
+        <input class="root-input" id="root-input" type="text" placeholder="Folder path or repository URL" autocomplete="off">
+        <button class="tool-button primary top-action" id="switch-folder" type="submit" title="Switch source">Go</button>
       </form>
       <div class="toolbar">
         <button class="tool-button top-action" id="refresh-button" type="button" title="Rebuild index">Sync</button>
@@ -401,7 +400,7 @@ INDEX_HTML = r"""<!doctype html>
     <div class="splitter" id="splitter" aria-hidden="true"></div>
     <main class="main">
       <div class="docbar">
-        <h1 id="doc-title">MdReader</h1>
+        <h1 id="doc-title">MdLens</h1>
         <p id="doc-path"></p>
       </div>
       <div class="content-wrap">
@@ -419,6 +418,7 @@ INDEX_HTML = r"""<!doctype html>
       switching: "Switching",
       switchFailed: "\u30d5\u30a9\u30eb\u30c0\u306e\u5207\u308a\u66ff\u3048\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002",
       enterFolder: "\u30d5\u30a9\u30eb\u30c0\u30d1\u30b9\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002",
+      apiUnavailable: "Cannot reach the MdLens API. Open the page from the running server URL and reload.",
     };
 
     const state = {
@@ -442,7 +442,7 @@ INDEX_HTML = r"""<!doctype html>
     const expandAllButton = document.getElementById("expand-all");
     const collapseAllButton = document.getElementById("collapse-all");
 
-    const savedSidebarWidth = Number(localStorage.getItem("mdreader.sidebarWidth"));
+    const savedSidebarWidth = Number(localStorage.getItem("mdlens.sidebarWidth"));
     if (savedSidebarWidth) {
       shellEl.style.setProperty("--sidebar-width", `${savedSidebarWidth}px`);
     }
@@ -519,7 +519,7 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function setPlaceholder(message = messages.selectFile, isError = false) {
-      titleEl.textContent = "MdReader";
+      titleEl.textContent = "MdLens";
       pathEl.textContent = "";
       contentEl.className = isError ? "markdown-body empty error" : "markdown-body empty";
       contentEl.textContent = message;
@@ -531,10 +531,30 @@ INDEX_HTML = r"""<!doctype html>
       rootInput.value = state.root;
     }
 
+    async function fetchJson(url, options = {}, fallbackMessage = messages.loadFailed) {
+      let response;
+      try {
+        response = await fetch(url, options);
+      } catch (_error) {
+        throw new Error(`${messages.apiUnavailable} Current page: ${location.origin}`);
+      }
+
+      let data = {};
+      try {
+        data = await response.json();
+      } catch (_error) {
+        if (response.ok) return data;
+        throw new Error(`${fallbackMessage} (${response.status})`);
+      }
+
+      if (!response.ok) {
+        throw new Error(data.detail || data.error || `${fallbackMessage} (${response.status})`);
+      }
+      return data;
+    }
+
     async function loadTree(selectInitial = true) {
-      const response = await fetch("/api/tree");
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || messages.loadFailed);
+      const data = await fetchJson("/api/tree", {}, messages.loadFailed);
       applyTreeData(data);
 
       if (searchInput.value.trim()) {
@@ -551,10 +571,11 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     async function loadFile(id, replaceOnly = false) {
-      const response = await fetch(`/api/file?id=${encodeURIComponent(id)}`);
-      const data = await response.json();
-      if (!response.ok) {
-        setPlaceholder(data.detail || data.error || messages.loadFailed, true);
+      let data;
+      try {
+        data = await fetchJson(`/api/file?id=${encodeURIComponent(id)}`, {}, messages.loadFailed);
+      } catch (error) {
+        setPlaceholder(error.message, true);
         return;
       }
       state.activeId = data.id;
@@ -593,9 +614,7 @@ INDEX_HTML = r"""<!doctype html>
         renderTree();
         return;
       }
-      const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || messages.loadFailed);
+      const data = await fetchJson(`/api/search?q=${encodeURIComponent(query)}`, {}, messages.loadFailed);
       renderResults(data.results || []);
     }
 
@@ -612,9 +631,7 @@ INDEX_HTML = r"""<!doctype html>
     async function refreshIndex() {
       const restoreButton = setButtonBusy(refreshButton, messages.syncing);
       try {
-        const response = await fetch("/api/refresh", { method: "POST" });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || messages.syncFailed);
+        await fetchJson("/api/refresh", { method: "POST" }, messages.syncFailed);
         await loadTree(false);
         if (state.activeId && state.files.some((file) => file.id === state.activeId)) {
           await loadFile(state.activeId, true);
@@ -638,13 +655,11 @@ INDEX_HTML = r"""<!doctype html>
 
       const restoreButton = setButtonBusy(switchFolderButton, messages.switching);
       try {
-        const response = await fetch("/api/folder", {
+        const data = await fetchJson("/api/folder", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ folder }),
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || messages.switchFailed);
+        }, messages.switchFailed);
 
         state.activeId = null;
         searchInput.value = "";
@@ -684,7 +699,7 @@ INDEX_HTML = r"""<!doctype html>
         const maxWidth = Math.max(280, window.innerWidth - 420);
         const width = Math.min(Math.max(moveEvent.clientX, 240), maxWidth);
         shellEl.style.setProperty("--sidebar-width", `${width}px`);
-        localStorage.setItem("mdreader.sidebarWidth", String(width));
+        localStorage.setItem("mdlens.sidebarWidth", String(width));
       };
 
       const onUp = () => {

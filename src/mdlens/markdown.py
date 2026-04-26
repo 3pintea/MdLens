@@ -57,7 +57,7 @@ def is_within_root(path: Path, root: Path) -> bool:
 
 
 def make_markdown() -> MarkdownIt:
-    """MdReader 用の Markdown レンダラーを作成する。
+    """MdLens 用の Markdown レンダラーを作成する。
 
     Returns:
         ローカル画像とリンクを `/asset` へ差し替える MarkdownIt インスタンス。

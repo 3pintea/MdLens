@@ -25,7 +25,7 @@ def create_engine_for_index(index_path: Path) -> Engine:
         index_path: SQLite index ファイルの保存先。
 
     Returns:
-        MdReader の index 操作用に PRAGMA を設定した SQLAlchemy engine。
+        MdLens の index 操作用に PRAGMA を設定した SQLAlchemy engine。
     """
 
     index_path.parent.mkdir(parents=True, exist_ok=True)
@@ -156,7 +156,9 @@ def replace_search_content(
         )
         return
 
-    executor.execute(text("DELETE FROM file_search WHERE rowid = :file_id"), {"file_id": file_id})
+    executor.execute(
+        text("DELETE FROM file_search WHERE rowid = :file_id"), {"file_id": file_id}
+    )
     executor.execute(
         text("INSERT INTO file_search(rowid, content) VALUES(:file_id, :content)"),
         {"file_id": file_id, "content": content},
@@ -171,4 +173,6 @@ def delete_search_content(executor: SqlExecutor, backend: str, file_id: int) -> 
         )
         return
 
-    executor.execute(text("DELETE FROM file_search WHERE rowid = :file_id"), {"file_id": file_id})
+    executor.execute(
+        text("DELETE FROM file_search WHERE rowid = :file_id"), {"file_id": file_id}
+    )

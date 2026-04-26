@@ -5,10 +5,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from mdreader import cli
-from mdreader.config import AppConfig
-from mdreader.schemas import IndexStats
+from mdlens import cli
+from mdlens.config import AppConfig
+from mdlens.schemas import IndexStats
 
 
 def test_paths_from_args_resolves_folder_and_default_index(workspace_tmp: Path) -> None:
@@ -20,7 +19,7 @@ def test_paths_from_args_resolves_folder_and_default_index(workspace_tmp: Path) 
 
     # Then: root と既定 index パスが絶対パスになる。
     assert root == workspace_tmp.resolve()
-    assert index_path == workspace_tmp.resolve() / ".mdreader_index.sqlite3"
+    assert index_path == workspace_tmp.resolve() / ".mdlens_index.sqlite3"
 
 
 def test_paths_from_args_rejects_missing_folder(workspace_tmp: Path) -> None:
@@ -56,7 +55,7 @@ def test_main_index_calls_refresh_index(
     # Given: index コマンドと refresh_index のモック。
     stats = IndexStats(
         root=str(workspace_tmp),
-        index=str(workspace_tmp / ".mdreader_index.sqlite3"),
+        index=str(workspace_tmp / ".mdlens_index.sqlite3"),
         seen=2,
     )
 
@@ -87,7 +86,7 @@ def test_main_app_refreshes_missing_index_and_runs_app(workspace_tmp: Path) -> N
     # Given: index が存在しないフォルダと、外部起動処理のモック。
     stats = IndexStats(
         root=str(workspace_tmp),
-        index=str(workspace_tmp / ".mdreader_index.sqlite3"),
+        index=str(workspace_tmp / ".mdlens_index.sqlite3"),
     )
 
     # When: app コマンドを実行する。

@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from mdlens.db import create_engine_for_index, ensure_schema, get_meta_value
+from mdlens.indexer import iter_markdown_files, parent_path, refresh_index
+from mdlens.repository import count_files, list_files, search_files
 from sqlalchemy.orm import Session
-
-from mdreader.db import create_engine_for_index, ensure_schema, get_meta_value
-from mdreader.indexer import iter_markdown_files, parent_path, refresh_index
-from mdreader.repository import count_files, list_files, search_files
 
 
 def test_refresh_index_tracks_files_search_and_deletions(workspace_tmp: Path) -> None:
@@ -20,7 +19,7 @@ def test_refresh_index_tracks_files_search_and_deletions(workspace_tmp: Path) ->
     note.write_text("# Note Title\n\nSQLite and uv are here.", encoding="utf-8")
     (root / "ignore.txt").write_text("not markdown", encoding="utf-8")
     (skipped / "skip.md").write_text("# Skip", encoding="utf-8")
-    index_path = root / ".mdreader_index.sqlite3"
+    index_path = root / ".mdlens_index.sqlite3"
 
     # When: 初回 index 更新を実行する。
     stats = refresh_index(root, index_path)
@@ -72,7 +71,7 @@ def test_refresh_index_marks_unchanged_files(workspace_tmp: Path) -> None:
     root = workspace_tmp / "library"
     root.mkdir()
     (root / "note.md").write_text("# Stable\n\nsame", encoding="utf-8")
-    index_path = root / ".mdreader_index.sqlite3"
+    index_path = root / ".mdlens_index.sqlite3"
     refresh_index(root, index_path)
 
     # When: ファイルを変更せずに再 index する。

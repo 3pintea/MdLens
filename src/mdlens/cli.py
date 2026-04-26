@@ -7,7 +7,13 @@ from pathlib import Path
 
 import uvicorn
 
-from .config import APP_NAME, AppConfig, DEFAULT_INDEX_NAME, default_index_path, resolve_root
+from .config import (
+    APP_NAME,
+    DEFAULT_INDEX_NAME,
+    AppConfig,
+    default_index_path,
+    resolve_root,
+)
 from .indexer import refresh_index
 from .schemas import IndexStats
 from .web import create_app
@@ -51,7 +57,9 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="mdreader", description="Read-only Markdown reader.")
+    parser = argparse.ArgumentParser(
+        prog="mdlens", description="Read-only Markdown reader."
+    )
     subparsers = parser.add_subparsers(dest="command")
 
     index_parser = subparsers.add_parser("index", help="Update the Markdown index.")
@@ -61,8 +69,12 @@ def build_parser() -> argparse.ArgumentParser:
     add_common_args(app_parser)
     app_parser.add_argument("--host", default="127.0.0.1", help="Host to bind.")
     app_parser.add_argument("--port", type=int, default=8765, help="Port to bind.")
-    app_parser.add_argument("--refresh", action="store_true", help="Refresh index before starting.")
-    app_parser.add_argument("--no-browser", action="store_true", help="Do not open a browser.")
+    app_parser.add_argument(
+        "--refresh", action="store_true", help="Refresh index before starting."
+    )
+    app_parser.add_argument(
+        "--no-browser", action="store_true", help="Do not open a browser."
+    )
 
     return parser
 
@@ -71,7 +83,11 @@ def paths_from_args(args: argparse.Namespace) -> tuple[Path, Path]:
     root = resolve_root(args.folder)
     if not root.exists() or not root.is_dir():
         raise SystemExit(f"Folder not found: {root}")
-    index_path = Path(args.index_path).expanduser().resolve() if args.index_path else default_index_path(root)
+    index_path = (
+        Path(args.index_path).expanduser().resolve()
+        if args.index_path
+        else default_index_path(root)
+    )
     return root, index_path
 
 
@@ -109,9 +125,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.refresh or not index_path.exists():
             print("Index is missing or refresh was requested. Updating index...")
             print_index_stats(refresh_index(root, index_path))
-        run_app(AppConfig(root=root, index_path=index_path), args.host, args.port, not args.no_browser)
+        run_app(
+            AppConfig(root=root, index_path=index_path),
+            args.host,
+            args.port,
+            not args.no_browser,
+        )
         return 0
 
     parser.print_help()
     return 1
-

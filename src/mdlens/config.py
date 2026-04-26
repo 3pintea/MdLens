@@ -4,9 +4,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-
-APP_NAME = "MdReader"
-DEFAULT_INDEX_NAME = ".mdreader_index.sqlite3"
+APP_NAME = "MdLens"
+DEFAULT_INDEX_NAME = ".mdlens_index.sqlite3"
 MARKDOWN_SUFFIX = ".md"
 SKIP_DIRS = {
     ".git",

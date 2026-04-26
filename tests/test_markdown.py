@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mdreader.markdown import (
+from mdlens.markdown import (
     decode_markdown,
     is_within_root,
     read_markdown,
